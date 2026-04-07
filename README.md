@@ -2,8 +2,11 @@
 
 # AI Inbox Manager — Reduce Email Noise by 90%
 
+👉 **Visual breakdown of how this works (diagram + steps):**  
+https://www.moneda-app.com/systems/ai-inbox-manager/?ref=github
+
 👉 **Want this to run automatically (no manual triggers)?**  
-Get the Pro version: https://hpychan.gumroad.com/l/ai-inbox-manager-pro
+Get the Pro version: https://hpychan.gumroad.com/l/ai-inbox-manager-pro?ref=github
 
 ---
 
@@ -152,5 +155,8 @@ Instead of checking email 10–20 times/day
 
 💡 If you're checking email more than 5 times/day, you need automation.
 
+👉 **Want this to run automatically (no manual triggers)?**  
+https://hpychan.gumroad.com/l/ai-inbox-manager-pro?ref=github
+
 👉 **Get Pro (set once, runs forever)**  
-https://hpychan.gumroad.com/l/ai-inbox-manager-pro
+https://hpychan.gumroad.com/l/ai-inbox-manager-pro?ref=github
