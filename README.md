@@ -155,9 +155,6 @@ Instead of checking email 10–20 times/day
 
 💡 If you're checking email more than 5 times/day, you need automation.
 
-👉 **Want this to run automatically (no manual triggers)?**  
-https://hpychan.gumroad.com/l/ai-inbox-manager-pro?ref=github
-
 👉 **Get Pro (set once, runs forever)**  
 https://hpychan.gumroad.com/l/ai-inbox-manager-pro?ref=github
 
