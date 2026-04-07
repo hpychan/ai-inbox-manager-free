@@ -1,0 +1,752 @@
+{
+  "updatedAt": "2026-03-03T14:13:52.889Z",
+  "createdAt": "2026-02-16T21:17:49.903Z",
+  "id": "JPKTyitClD5fvdaR",
+  "name": "PA_Gmail_Triage_FREE",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        20
+      ],
+      "id": "gmail-trigger-free",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "y8ai7AEdw5WUWuSP",
+          "name": "Gmail account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -20,
+        20
+      ],
+      "id": "wait-free",
+      "name": "Wait"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "query",
+              "value": "is:unread -from:me",
+              "type": "string"
+            },
+            {
+              "name": "maxResults",
+              "value": 10,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        20
+      ],
+      "id": "prepare-free",
+      "name": "Prepare Input"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        180
+      ],
+      "id": "manual-free",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": "={{ $json.maxResults }}",
+        "filters": {
+          "q": "={{ $json.query }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        500,
+        100
+      ],
+      "id": "get-unread-free",
+      "name": "Get unread",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "y8ai7AEdw5WUWuSP",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "model",
+              "content": "You are an inbox classifier.\\nClassify each email as important or not important.\\n\\nRules:\\n- important = true only for urgent items, deadlines, security/payment alerts, approvals, or direct requests needing attention soon.\\n- newsletters, promotions, routine notifications are usually important = false.\\n- Keep summary short and concrete.\\n\\nOutput JSON only as an array:\\n[\\n  {\\n    \"important\": true | false,\\n    \"summary\": \"string\"\\n  }\\n]"
+            },
+            {
+              "content": "=Emails\\n\\n{{ JSON.stringify($input.all().map(i => i.json)) }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        760,
+        100
+      ],
+      "id": "classify-free",
+      "name": "Basic Inbox Classifier",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "j8b1uNtdcJoT1oP0",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $json.content?.parts?.[0]?.text || '';\nraw = raw.replace(/```json/g, '').replace(/```/g, '').trim();\nlet parsed = [];\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = []; }\nif (!Array.isArray(parsed)) parsed = [];\nconst importantItems = parsed.filter(i => i && i.important === true);\nreturn [{ json: { important_count: importantItems.length, summaries: importantItems.map(i => i.summary || '(no summary)') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        100
+      ],
+      "id": "normalize-free",
+      "name": "Summarize Important Emails"
+    },
+    {
+      "parameters": {
+        "jsCode": "const escapeHtml = (text) =>\n  String(text ?? '')\n    .replaceAll('&', '&amp;')\n    .replaceAll('<', '&lt;')\n    .replaceAll('>', '&gt;');\n\nconst count = Number($json.important_count || 0);\nconst summaries = Array.isArray($json.summaries) ? $json.summaries : [];\n\nconst greetings = {\n  morning: { texts: ['Good morning', 'Morning', \"Hope your morning's going well\"], emojis: ['☀️', '🌅', '🌤️'] },\n  afternoon: { texts: ['Good afternoon', 'Afternoon', \"Hope your day's going smoothly\"], emojis: ['🌤️', '📬', '🌿'] },\n  evening: { texts: ['Good evening', 'Evening', 'Wrapping up the day?'], emojis: ['🌙', '🌆', '✨'] },\n  night: { texts: ['Still up?', 'Late night check-in', 'Burning the midnight oil?'], emojis: ['🌙', '🌌', '✨'] },\n};\n\nconst userTz = 'Asia/Hong_Kong';\nconst hour = Number(new Intl.DateTimeFormat('en-US', {\n  hour: '2-digit',\n  hour12: false,\n  timeZone: userTz,\n}).format(new Date()));\n\nlet period;\nif (hour >= 0 && hour < 5) period = 'night';\nelse if (hour < 12) period = 'morning';\nelse if (hour < 18) period = 'afternoon';\nelse period = 'evening';\n\nconst greeting = greetings[period].texts[Math.floor(Math.random() * greetings[period].texts.length)];\nconst emoji = greetings[period].emojis[Math.floor(Math.random() * greetings[period].emojis.length)];\n\nconst openings = [\n  \"Here's your inbox snapshot:\",\n  'Quick inbox update:',\n  \"Here's what came in:\",\n  'Your inbox at a glance:',\n];\nconst opening = openings[Math.floor(Math.random() * openings.length)];\n\nconst section = count > 0\n  ? `📌 Important (${count})\\n` + summaries.slice(0, 5).map((s) => `• ${escapeHtml(s)}`).join('\\n')\n  : '✅ No important emails right now.';\n\nconst footer = count > 0\n  ? 'Reply \"details\" if you want a deeper breakdown.'\n  : 'All clear for now.';\n\nconst message = `${greeting} ${emoji}\\n\\n${opening}\\n\\n${section}\\n\\n${footer}`;\nreturn [{ json: { message } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        100
+      ],
+      "id": "compose-free",
+      "name": "Compose Simple Telegram Message"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        100
+      ],
+      "id": "send-telegram-free",
+      "name": "Send a text message",
+      "credentials": {
+        "telegramApi": {
+          "id": "jz2zIuBFnV0S3Tk2",
+          "name": "Email Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        340
+      ],
+      "id": "schedule-trigger-free",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "query",
+              "value": "is:unread -from:me",
+              "type": "string"
+            },
+            {
+              "name": "maxResults",
+              "value": 10,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        340
+      ],
+      "id": "prepare-schedule-free",
+      "name": "Prepare Schedule Task"
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input": {
+      "main": [
+        [
+          {
+            "node": "Get unread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get unread": {
+      "main": [
+        [
+          {
+            "node": "Basic Inbox Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic Inbox Classifier": {
+      "main": [
+        [
+          {
+            "node": "Summarize Important Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Important Emails": {
+      "main": [
+        [
+          {
+            "node": "Compose Simple Telegram Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Simple Telegram Message": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Schedule Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Schedule Task": {
+      "main": [
+        [
+          {
+            "node": "Get unread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "global": {}
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "3efb4787-c9f0-4ae9-a223-d20b00ed5e4e",
+  "triggerCount": 2,
+  "shared": [
+    {
+      "updatedAt": "2026-02-16T21:17:49.905Z",
+      "createdAt": "2026-02-16T21:17:49.905Z",
+      "role": "workflow:owner",
+      "workflowId": "JPKTyitClD5fvdaR",
+      "projectId": "wZZKEgCc4sON4wQL",
+      "project": {
+        "updatedAt": "2026-01-25T11:52:36.840Z",
+        "createdAt": "2026-01-25T11:52:32.139Z",
+        "id": "wZZKEgCc4sON4wQL",
+        "name": "Henry Chan <hpychan@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "cc46734e-2d97-4e70-af91-8c291aed9bb8"
+      }
+    }
+  ],
+  "tags": [
+    "free"
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-03-03T14:13:52.889Z",
+    "createdAt": "2026-02-16T21:17:49.903Z",
+    "versionId": "3efb4787-c9f0-4ae9-a223-d20b00ed5e4e",
+    "workflowId": "JPKTyitClD5fvdaR",
+    "nodes": [
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.gmailTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -240,
+          20
+        ],
+        "id": "gmail-trigger-free",
+        "name": "Gmail Trigger",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "y8ai7AEdw5WUWuSP",
+            "name": "Gmail account"
+          }
+        },
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "amount": 1,
+          "unit": "minutes"
+        },
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          -20,
+          20
+        ],
+        "id": "wait-free",
+        "name": "Wait"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "name": "query",
+                "value": "is:unread -from:me",
+                "type": "string"
+              },
+              {
+                "name": "maxResults",
+                "value": 10,
+                "type": "number"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          220,
+          20
+        ],
+        "id": "prepare-free",
+        "name": "Prepare Input"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -240,
+          180
+        ],
+        "id": "manual-free",
+        "name": "When clicking ‘Execute workflow’"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "returnAll": false,
+          "limit": "={{ $json.maxResults }}",
+          "filters": {
+            "q": "={{ $json.query }}"
+          }
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.2,
+        "position": [
+          500,
+          100
+        ],
+        "id": "get-unread-free",
+        "name": "Get unread",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "y8ai7AEdw5WUWuSP",
+            "name": "Gmail account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "modelId": {
+            "__rl": true,
+            "value": "models/gemini-2.5-flash",
+            "mode": "list",
+            "cachedResultName": "models/gemini-2.5-flash"
+          },
+          "messages": {
+            "values": [
+              {
+                "role": "model",
+                "content": "You are an inbox classifier.\\nClassify each email as important or not important.\\n\\nRules:\\n- important = true only for urgent items, deadlines, security/payment alerts, approvals, or direct requests needing attention soon.\\n- newsletters, promotions, routine notifications are usually important = false.\\n- Keep summary short and concrete.\\n\\nOutput JSON only as an array:\\n[\\n  {\\n    \"important\": true | false,\\n    \"summary\": \"string\"\\n  }\\n]"
+              },
+              {
+                "content": "=Emails\\n\\n{{ JSON.stringify($input.all().map(i => i.json)) }}"
+              }
+            ]
+          },
+          "builtInTools": {},
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.googleGemini",
+        "typeVersion": 1.1,
+        "position": [
+          760,
+          100
+        ],
+        "id": "classify-free",
+        "name": "Basic Inbox Classifier",
+        "credentials": {
+          "googlePalmApi": {
+            "id": "j8b1uNtdcJoT1oP0",
+            "name": "Google Gemini(PaLM) Api account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "let raw = $json.content?.parts?.[0]?.text || '';\nraw = raw.replace(/```json/g, '').replace(/```/g, '').trim();\nlet parsed = [];\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = []; }\nif (!Array.isArray(parsed)) parsed = [];\nconst importantItems = parsed.filter(i => i && i.important === true);\nreturn [{ json: { important_count: importantItems.length, summaries: importantItems.map(i => i.summary || '(no summary)') } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1020,
+          100
+        ],
+        "id": "normalize-free",
+        "name": "Summarize Important Emails"
+      },
+      {
+        "parameters": {
+          "jsCode": "const escapeHtml = (text) =>\n  String(text ?? '')\n    .replaceAll('&', '&amp;')\n    .replaceAll('<', '&lt;')\n    .replaceAll('>', '&gt;');\n\nconst count = Number($json.important_count || 0);\nconst summaries = Array.isArray($json.summaries) ? $json.summaries : [];\n\nconst greetings = {\n  morning: { texts: ['Good morning', 'Morning', \"Hope your morning's going well\"], emojis: ['☀️', '🌅', '🌤️'] },\n  afternoon: { texts: ['Good afternoon', 'Afternoon', \"Hope your day's going smoothly\"], emojis: ['🌤️', '📬', '🌿'] },\n  evening: { texts: ['Good evening', 'Evening', 'Wrapping up the day?'], emojis: ['🌙', '🌆', '✨'] },\n  night: { texts: ['Still up?', 'Late night check-in', 'Burning the midnight oil?'], emojis: ['🌙', '🌌', '✨'] },\n};\n\nconst userTz = 'Asia/Hong_Kong';\nconst hour = Number(new Intl.DateTimeFormat('en-US', {\n  hour: '2-digit',\n  hour12: false,\n  timeZone: userTz,\n}).format(new Date()));\n\nlet period;\nif (hour >= 0 && hour < 5) period = 'night';\nelse if (hour < 12) period = 'morning';\nelse if (hour < 18) period = 'afternoon';\nelse period = 'evening';\n\nconst greeting = greetings[period].texts[Math.floor(Math.random() * greetings[period].texts.length)];\nconst emoji = greetings[period].emojis[Math.floor(Math.random() * greetings[period].emojis.length)];\n\nconst openings = [\n  \"Here's your inbox snapshot:\",\n  'Quick inbox update:',\n  \"Here's what came in:\",\n  'Your inbox at a glance:',\n];\nconst opening = openings[Math.floor(Math.random() * openings.length)];\n\nconst section = count > 0\n  ? `📌 Important (${count})\\n` + summaries.slice(0, 5).map((s) => `• ${escapeHtml(s)}`).join('\\n')\n  : '✅ No important emails right now.';\n\nconst footer = count > 0\n  ? 'Reply \"details\" if you want a deeper breakdown.'\n  : 'All clear for now.';\n\nconst message = `${greeting} ${emoji}\\n\\n${opening}\\n\\n${section}\\n\\n${footer}`;\nreturn [{ json: { message } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1280,
+          100
+        ],
+        "id": "compose-free",
+        "name": "Compose Simple Telegram Message"
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+          "text": "={{ $json.message }}",
+          "additionalFields": {
+            "appendAttribution": false
+          }
+        },
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          1540,
+          100
+        ],
+        "id": "send-telegram-free",
+        "name": "Send a text message",
+        "credentials": {
+          "telegramApi": {
+            "id": "jz2zIuBFnV0S3Tk2",
+            "name": "Email Agent"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 1
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -240,
+          340
+        ],
+        "id": "schedule-trigger-free",
+        "name": "Schedule Trigger"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "name": "query",
+                "value": "is:unread -from:me",
+                "type": "string"
+              },
+              {
+                "name": "maxResults",
+                "value": 10,
+                "type": "number"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          220,
+          340
+        ],
+        "id": "prepare-schedule-free",
+        "name": "Prepare Schedule Task"
+      }
+    ],
+    "connections": {
+      "Gmail Trigger": {
+        "main": [
+          [
+            {
+              "node": "Wait",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait": {
+        "main": [
+          [
+            {
+              "node": "Prepare Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "When clicking ‘Execute workflow’": {
+        "main": [
+          [
+            {
+              "node": "Prepare Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Input": {
+        "main": [
+          [
+            {
+              "node": "Get unread",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get unread": {
+        "main": [
+          [
+            {
+              "node": "Basic Inbox Classifier",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Basic Inbox Classifier": {
+        "main": [
+          [
+            {
+              "node": "Summarize Important Emails",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Summarize Important Emails": {
+        "main": [
+          [
+            {
+              "node": "Compose Simple Telegram Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Compose Simple Telegram Message": {
+        "main": [
+          [
+            {
+              "node": "Send a text message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Prepare Schedule Task",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Schedule Task": {
+        "main": [
+          [
+            {
+              "node": "Get unread",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "saveDataErrorExecution": "all",
+      "saveDataSuccessExecution": "all",
+      "saveManualExecutions": true,
+      "saveExecutionProgress": true,
+      "callerPolicy": "workflowsFromSameOwner",
+      "availableInMCP": false
+    },
+    "staticData": {
+      "global": {}
+    },
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "pinData": {}
+  }
+}
