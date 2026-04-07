@@ -160,3 +160,7 @@ https://hpychan.gumroad.com/l/ai-inbox-manager-pro?ref=github
 
 👉 **Get Pro (set once, runs forever)**  
 https://hpychan.gumroad.com/l/ai-inbox-manager-pro?ref=github
+
+---
+
+⭐ If this helps, consider starring the repo.
